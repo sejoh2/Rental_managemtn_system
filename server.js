@@ -67,7 +67,7 @@ app.use('/api/units', unitRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/agreements', agreementRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/payments/mpesa', mpesaRoutes);
+app.use('/api/payments', mpesaRoutes);
 app.use('/api/water', waterRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
@@ -111,13 +111,13 @@ async function startServer() {
     console.log('All tables initialized successfully');
 
     app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-      console.log('M-Pesa C2B endpoints:');
-      console.log('POST /api/payments/mpesa/accounts/:paymentAccountId/connect');
-      console.log('POST /api/payments/mpesa/simulate');
-      console.log('POST /api/payments/mpesa/c2b/validation');
-      console.log('POST /api/payments/mpesa/c2b/confirmation');
-    });
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log('M-Pesa C2B endpoints:');
+  console.log('POST /api/payments/accounts/:paymentAccountId/connect');
+  console.log('POST /api/payments/simulate');
+  console.log('POST /api/payments/c2b/validation');
+  console.log('POST /api/payments/c2b/confirmation');
+});
   } catch (error) {
     console.error('Failed to start server:', error.message);
     process.exit(1);

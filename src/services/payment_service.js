@@ -111,7 +111,18 @@ async function assertTenantAccess(user, tenantId) {
   return result.rows[0];
 }
 
-async function allocatePayment(tenantId, amount, applyTo, paymentMethod, reference, phone, notes, receivedAt, user, ipAddress) {
+async function allocatePayment(
+  tenantId,
+  amount,
+  applyTo,
+  paymentMethod,
+  reference,
+  phone,
+  notes,
+  receivedAt,
+  user,
+  ipAddress
+) {
   // Get current tenant status
   const tenantResult = await db.query(
     `
@@ -128,57 +139,82 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
       water_deposit_paid,
       monthly_rent
     FROM tenants
-    WHERE id = $1 AND status != 'archived'
+    WHERE id = $1 
+      AND status != 'archived'
     `,
     [tenantId]
   );
 
   const tenant = tenantResult.rows[0];
-  
+
   if (!tenant) {
     throw new Error('Tenant not found');
   }
 
+  // Manual payments have an authenticated user.
+  // Automatic provider callbacks such as M-Pesa do not.
+  const actorUserId = user?.id || null;
+
   let remainingAmount = Number(amount);
+
   let rentDepositApplied = 0;
   let waterDepositApplied = 0;
   let rentApplied = 0;
   let waterBillApplied = 0;
+
   let depositFullyPaid = false;
 
   // ============================================================
-  // 1. CHECK RENT DEPOSIT (if apply_to is rent_balance or rent_deposit)
+  // 1. CHECK RENT DEPOSIT
   // ============================================================
+  // Any payment coming through the rent account first clears
+  // the tenant's outstanding rent deposit.
   if (applyTo === 'rent_balance' || applyTo === 'rent_deposit') {
-    const depositRequired = Number(tenant.rent_deposit_amount || 0);
-    const depositPaid = Number(tenant.rent_deposit_paid || 0);
-    const depositRemaining = depositRequired - depositPaid;
+    const depositRequired = Number(
+      tenant.rent_deposit_amount || 0
+    );
+
+    const depositPaid = Number(
+      tenant.rent_deposit_paid || 0
+    );
+
+    const depositRemaining =
+      depositRequired - depositPaid;
 
     if (depositRemaining > 0) {
       if (remainingAmount >= depositRemaining) {
         rentDepositApplied = depositRemaining;
+
         remainingAmount -= depositRemaining;
+
         depositFullyPaid = true;
-        
+
         await db.query(
           `
-          UPDATE tenants 
+          UPDATE tenants
           SET rent_deposit_paid = rent_deposit_paid + $1
           WHERE id = $2
           `,
-          [rentDepositApplied, tenantId]
+          [
+            rentDepositApplied,
+            tenantId,
+          ]
         );
       } else {
         rentDepositApplied = remainingAmount;
+
         remainingAmount = 0;
-        
+
         await db.query(
           `
-          UPDATE tenants 
+          UPDATE tenants
           SET rent_deposit_paid = rent_deposit_paid + $1
           WHERE id = $2
           `,
-          [rentDepositApplied, tenantId]
+          [
+            rentDepositApplied,
+            tenantId,
+          ]
         );
       }
     } else {
@@ -187,38 +223,56 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
   }
 
   // ============================================================
-  // 2. CHECK WATER DEPOSIT (if apply_to is water_bill)
+  // 2. CHECK WATER DEPOSIT
   // ============================================================
+  // Any payment coming through the water account first clears
+  // the tenant's outstanding water deposit.
   if (applyTo === 'water_bill') {
-    const waterDepositRequired = Number(tenant.water_deposit_amount || DEFAULT_WATER_DEPOSIT);
-    const waterDepositPaid = Number(tenant.water_deposit_paid || 0);
-    const waterDepositRemaining = waterDepositRequired - waterDepositPaid;
+    const waterDepositRequired = Number(
+      tenant.water_deposit_amount || DEFAULT_WATER_DEPOSIT
+    );
+
+    const waterDepositPaid = Number(
+      tenant.water_deposit_paid || 0
+    );
+
+    const waterDepositRemaining =
+      waterDepositRequired - waterDepositPaid;
 
     if (waterDepositRemaining > 0) {
       if (remainingAmount >= waterDepositRemaining) {
         waterDepositApplied = waterDepositRemaining;
+
         remainingAmount -= waterDepositRemaining;
+
         depositFullyPaid = true;
-        
+
         await db.query(
           `
-          UPDATE tenants 
+          UPDATE tenants
           SET water_deposit_paid = water_deposit_paid + $1
           WHERE id = $2
           `,
-          [waterDepositApplied, tenantId]
+          [
+            waterDepositApplied,
+            tenantId,
+          ]
         );
       } else {
         waterDepositApplied = remainingAmount;
+
         remainingAmount = 0;
-        
+
         await db.query(
           `
-          UPDATE tenants 
+          UPDATE tenants
           SET water_deposit_paid = water_deposit_paid + $1
           WHERE id = $2
           `,
-          [waterDepositApplied, tenantId]
+          [
+            waterDepositApplied,
+            tenantId,
+          ]
         );
       }
     } else {
@@ -227,15 +281,24 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
   }
 
   // ============================================================
-  // 3. APPLY REMAINING TO RENT OR WATER BILL
+  // 3. APPLY REMAINING AMOUNT
   // ============================================================
+  // Only money remaining after the relevant deposit has been
+  // fully paid can go toward rent or a water bill.
   if (remainingAmount > 0 && depositFullyPaid) {
     if (applyTo === 'water_bill') {
-      // Apply to oldest unpaid water bill
-      waterBillApplied = await applyToWaterBill(tenantId, remainingAmount);
+      waterBillApplied = await applyToWaterBill(
+        tenantId,
+        remainingAmount
+      );
+
       remainingAmount = 0;
-    } else if (applyTo === 'rent_balance' || applyTo === 'rent_deposit') {
+    } else if (
+      applyTo === 'rent_balance' ||
+      applyTo === 'rent_deposit'
+    ) {
       rentApplied = remainingAmount;
+
       remainingAmount = 0;
     }
   }
@@ -243,9 +306,13 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
   // ============================================================
   // 4. CREATE PAYMENT RECORDS
   // ============================================================
+
   const payments = [];
 
-  // 4a. Rent deposit payment
+  // ============================================================
+  // 4A. RENT DEPOSIT PAYMENT
+  // ============================================================
+
   if (rentDepositApplied > 0) {
     const depositPayment = await db.query(
       `
@@ -267,7 +334,24 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         matched_by,
         matched_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP), 'matched', $13, $13, CURRENT_TIMESTAMP)
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP),
+        'matched',
+        $13,
+        $13,
+        CURRENT_TIMESTAMP
+      )
       RETURNING *
       `,
       [
@@ -278,18 +362,28 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         rentDepositApplied,
         paymentMethod || 'mpesa_auto',
         'rent_deposit',
-        paymentMethod === 'mpesa_auto' ? 'mpesa_auto' : 'manual',
+        paymentMethod === 'mpesa_auto'
+          ? 'mpesa_auto'
+          : 'manual',
         phone || null,
-        reference ? `${reference}-DEPOSIT` : null,
-        notes ? `${notes} (rent deposit)` : 'Rent deposit payment',
+        reference
+          ? `${reference}-DEPOSIT`
+          : null,
+        notes
+          ? `${notes} (rent deposit)`
+          : 'Rent deposit payment',
         receivedAt || null,
-        user.id,
+        actorUserId,
       ]
     );
+
     payments.push(depositPayment.rows[0]);
   }
 
-  // 4b. Water deposit payment
+  // ============================================================
+  // 4B. WATER DEPOSIT PAYMENT
+  // ============================================================
+
   if (waterDepositApplied > 0) {
     const waterDepositPayment = await db.query(
       `
@@ -311,7 +405,24 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         matched_by,
         matched_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP), 'matched', $13, $13, CURRENT_TIMESTAMP)
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP),
+        'matched',
+        $13,
+        $13,
+        CURRENT_TIMESTAMP
+      )
       RETURNING *
       `,
       [
@@ -322,18 +433,30 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         waterDepositApplied,
         paymentMethod || 'mpesa_auto',
         'water_deposit',
-        paymentMethod === 'mpesa_auto' ? 'mpesa_auto' : 'manual',
+        paymentMethod === 'mpesa_auto'
+          ? 'mpesa_auto'
+          : 'manual',
         phone || null,
-        reference ? `${reference}-WATER-DEPOSIT` : null,
-        notes ? `${notes} (water deposit)` : 'Water deposit payment',
+        reference
+          ? `${reference}-WATER-DEPOSIT`
+          : null,
+        notes
+          ? `${notes} (water deposit)`
+          : 'Water deposit payment',
         receivedAt || null,
-        user.id,
+        actorUserId,
       ]
     );
-    payments.push(waterDepositPayment.rows[0]);
+
+    payments.push(
+      waterDepositPayment.rows[0]
+    );
   }
 
-  // 4c. Rent payment
+  // ============================================================
+  // 4C. RENT PAYMENT
+  // ============================================================
+
   if (rentApplied > 0) {
     const rentPayment = await db.query(
       `
@@ -355,7 +478,24 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         matched_by,
         matched_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP), 'matched', $13, $13, CURRENT_TIMESTAMP)
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP),
+        'matched',
+        $13,
+        $13,
+        CURRENT_TIMESTAMP
+      )
       RETURNING *
       `,
       [
@@ -366,18 +506,24 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         rentApplied,
         paymentMethod || 'mpesa_auto',
         'rent_balance',
-        paymentMethod === 'mpesa_auto' ? 'mpesa_auto' : 'manual',
+        paymentMethod === 'mpesa_auto'
+          ? 'mpesa_auto'
+          : 'manual',
         phone || null,
         reference || null,
         notes || 'Rent payment',
         receivedAt || null,
-        user.id,
+        actorUserId,
       ]
     );
+
     payments.push(rentPayment.rows[0]);
   }
 
-  // 4d. Water bill payment
+  // ============================================================
+  // 4D. WATER BILL PAYMENT
+  // ============================================================
+
   if (waterBillApplied > 0) {
     const waterPayment = await db.query(
       `
@@ -399,7 +545,24 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         matched_by,
         matched_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP), 'matched', $13, $13, CURRENT_TIMESTAMP)
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        COALESCE($12::TIMESTAMPTZ, CURRENT_TIMESTAMP),
+        'matched',
+        $13,
+        $13,
+        CURRENT_TIMESTAMP
+      )
       RETURNING *
       `,
       [
@@ -410,29 +573,44 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
         waterBillApplied,
         paymentMethod || 'mpesa_auto',
         'water_bill',
-        paymentMethod === 'mpesa_auto' ? 'mpesa_auto' : 'manual',
+        paymentMethod === 'mpesa_auto'
+          ? 'mpesa_auto'
+          : 'manual',
         phone || null,
-        reference ? `${reference}-WATER` : null,
-        notes ? `${notes} (water bill)` : 'Water bill payment',
+        reference
+          ? `${reference}-WATER`
+          : null,
+        notes
+          ? `${notes} (water bill)`
+          : 'Water bill payment',
         receivedAt || null,
-        user.id,
+        actorUserId,
       ]
     );
+
     payments.push(waterPayment.rows[0]);
   }
+
+  // ============================================================
+  // 5. ENSURE SOMETHING WAS ALLOCATED
+  // ============================================================
 
   if (payments.length === 0) {
     throw new Error('No payment was allocated');
   }
 
+  // ============================================================
+  // 6. AUDIT LOG
+  // ============================================================
+
   await logAudit({
-    userId: user.id,
+    userId: actorUserId,
     action: 'PAYMENT_ALLOCATED',
     entityType: 'payment',
     entityId: payments[0]?.id || null,
     metadata: {
       tenant_id: tenantId,
-      total_amount: amount,
+      total_amount: Number(amount),
       rent_deposit_applied: rentDepositApplied,
       water_deposit_applied: waterDepositApplied,
       rent_applied: rentApplied,
@@ -442,6 +620,10 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
     ipAddress,
   });
 
+  // ============================================================
+  // 7. RETURN ALLOCATION RESULT
+  // ============================================================
+
   return {
     total_amount: Number(amount),
     rent_deposit_applied: rentDepositApplied,
@@ -449,7 +631,7 @@ async function allocatePayment(tenantId, amount, applyTo, paymentMethod, referen
     rent_applied: rentApplied,
     water_bill_applied: waterBillApplied,
     deposit_fully_paid: depositFullyPaid,
-    payments: payments,
+    payments,
   };
 }
 
@@ -1078,6 +1260,7 @@ async function searchTenantsForMatching(user, searchTerm) {
 }
 
 module.exports = {
+  allocatePayment,
   recordManualTenantPayment,
   recordAutoPayment,
   getPaymentById,

@@ -5,6 +5,7 @@ async function connectAccount(req, res) {
     const paymentAccount = await mpesaService.connectMpesaAccount(
       req.user,
       Number(req.params.paymentAccountId),
+      req.body,
       req.ip
     );
 
@@ -52,6 +53,10 @@ async function c2bValidation(req, res) {
 }
 
 async function c2bConfirmation(req, res) {
+   console.log('========================================');
+  console.log('M-PESA C2B CONFIRMATION RECEIVED');
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log('========================================');
   try {
     await mpesaService.processC2BConfirmation(req.body, req.ip);
 

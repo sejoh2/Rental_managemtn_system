@@ -29,57 +29,214 @@ function splitName(fullName) {
 }
 
 function publicTenant(row) {
-  const balanceAmount = Number(row.balance_amount || 0);
-  const creditAmount = balanceAmount < 0 ? Math.abs(balanceAmount) : 0;
+  // ============================================================
+  // RENT
+  // ============================================================
+
+  const monthlyRent = Number(row.monthly_rent || 0);
+  const rentPaidAmount = Number(row.rent_paid_calculated || 0);
+  const rentBalanceAmount = monthlyRent - rentPaidAmount;
+
+  // ============================================================
+  // RENT DEPOSIT
+  // ============================================================
+
+  const rentDepositAmount = Number(row.rent_deposit_amount || 0);
+  const rentDepositPaid = Number(
+    row.rent_deposit_paid_calculated || 0
+  );
+
+  const rentDepositBalance = Math.max(
+    rentDepositAmount - rentDepositPaid,
+    0
+  );
+
+  // ============================================================
+  // WATER
+  // ============================================================
+
+  const waterBillAmount = Number(row.water_bill_amount || 0);
+  const waterPaidAmount = Number(row.water_paid_calculated || 0);
+
+  const waterBalanceAmount = Number(
+  row.water_balance_calculated || 0
+);
+
+  // ============================================================
+  // WATER DEPOSIT
+  // ============================================================
+
+  const waterDepositAmount = Number(row.water_deposit_amount || 0);
+  const waterDepositPaid = Number(
+    row.water_deposit_paid_calculated || 0
+  );
+
+  const waterDepositBalance = Math.max(
+    waterDepositAmount - waterDepositPaid,
+    0
+  );
+
+  // ============================================================
+  // ELECTRICITY DEPOSIT
+  // ============================================================
+
+  const electricityDepositAmount = Number(
+    row.electricity_deposit_amount || 0
+  );
+
+  const electricityDepositPaid = Number(
+    row.electricity_deposit_paid_calculated || 0
+  );
+
+  const electricityDepositBalance = Math.max(
+    electricityDepositAmount - electricityDepositPaid,
+    0
+  );
+
+  // ============================================================
+  // TOTALS
+  // ============================================================
+
+  const totalPaidAmount =
+    rentPaidAmount +
+    rentDepositPaid +
+    waterPaidAmount +
+    waterDepositPaid +
+    electricityDepositPaid;
+
+  const totalBalanceAmount =
+    rentBalanceAmount +
+    rentDepositBalance +
+    waterBalanceAmount +
+    waterDepositBalance +
+    electricityDepositBalance;
+
+  // ============================================================
+  // RENT STATUS
+  // ============================================================
+
+  const rentStatus =
+    rentBalanceAmount > 0
+      ? 'partial'
+      : rentBalanceAmount < 0
+        ? 'advance_credit'
+        : 'paid';
+
+  const rentStatusLabel =
+    rentBalanceAmount > 0
+      ? 'Partial'
+      : rentBalanceAmount < 0
+        ? 'Advance credit'
+        : 'Paid';
+
+  // ============================================================
+  // RESPONSE
+  // ============================================================
 
   return {
     id: Number(row.id),
     owner_id: Number(row.owner_id),
+
     property_id: Number(row.property_id),
     property_name: row.property_name,
+
     unit_id: Number(row.unit_id),
     unit_number: row.unit_number,
+
     full_name: row.full_name,
     name: row.full_name,
+
     phone: row.phone,
     id_number: row.id_number,
     move_in_date: row.move_in_date,
-    monthly_rent: Number(row.monthly_rent || 0),
-    monthly_rent_display: formatMoney(row.monthly_rent),
-    rent_paid: Number(row.rent_paid_calculated || row.paid_amount || 0),
-    rent_paid_display: formatMoney(row.rent_paid_calculated || row.paid_amount || 0),
-    rent_deposit_amount: Number(row.rent_deposit_amount || 0),
-    rent_deposit_display: formatMoney(row.rent_deposit_amount || 0),
-    rent_deposit_paid: Number(row.rent_deposit_paid_calculated || row.rent_deposit_paid || 0),
-    rent_deposit_paid_display: formatMoney(row.rent_deposit_paid_calculated || row.rent_deposit_paid || 0),
-    electricity_deposit_amount: Number(row.electricity_deposit_amount || 0),
-    electricity_deposit_display: formatMoney(row.electricity_deposit_amount || 0),
-    electricity_deposit_paid: Number(row.electricity_deposit_paid_calculated || row.electricity_deposit_paid || 0),
-    electricity_deposit_paid_display: formatMoney(row.electricity_deposit_paid_calculated || row.electricity_deposit_paid || 0),
-    water_deposit_amount: Number(row.water_deposit_amount || 0),
-    water_deposit_display: formatMoney(row.water_deposit_amount || 0),
-    water_deposit_paid: Number(row.water_deposit_paid_calculated || row.water_deposit_paid || 0),
-    water_deposit_paid_display: formatMoney(row.water_deposit_paid_calculated || row.water_deposit_paid || 0),
-    paid_amount: Number(row.paid_amount || 0),
-    paid_display: formatMoney(row.paid_amount || 0),
-    balance_amount: balanceAmount,
-    balance_display: balanceAmount < 0 ? `+ ${formatMoney(creditAmount)}` : formatMoney(balanceAmount),
+
+    // Rent
+    monthly_rent: monthlyRent,
+    monthly_rent_display: formatMoney(monthlyRent),
+
+    rent_paid_amount: rentPaidAmount,
+    rent_paid_display: formatMoney(rentPaidAmount),
+
+    rent_balance_amount: rentBalanceAmount,
+    rent_balance_display:
+      rentBalanceAmount < 0
+        ? `+ ${formatMoney(Math.abs(rentBalanceAmount))}`
+        : formatMoney(rentBalanceAmount),
+
+    // Rent deposit
+    rent_deposit_amount: rentDepositAmount,
+    rent_deposit_display: formatMoney(rentDepositAmount),
+
+    rent_deposit_paid: rentDepositPaid,
+    rent_deposit_paid_display: formatMoney(rentDepositPaid),
+
+    rent_deposit_balance: rentDepositBalance,
+    rent_deposit_balance_display: formatMoney(rentDepositBalance),
+
+    // Water
+    water_bill_amount: waterBillAmount,
+    water_bill_display: formatMoney(waterBillAmount),
+
+    water_paid_amount: waterPaidAmount,
+    water_paid_display: formatMoney(waterPaidAmount),
+
+    water_balance_amount: waterBalanceAmount,
+    water_balance_display: formatMoney(waterBalanceAmount),
+
+    // Water deposit
+    water_deposit_amount: waterDepositAmount,
+    water_deposit_display: formatMoney(waterDepositAmount),
+
+    water_deposit_paid: waterDepositPaid,
+    water_deposit_paid_display: formatMoney(waterDepositPaid),
+
+    water_deposit_balance: waterDepositBalance,
+    water_deposit_balance_display: formatMoney(waterDepositBalance),
+
+    // Electricity deposit
+    electricity_deposit_amount: electricityDepositAmount,
+    electricity_deposit_display: formatMoney(
+      electricityDepositAmount
+    ),
+
+    electricity_deposit_paid: electricityDepositPaid,
+    electricity_deposit_paid_display: formatMoney(
+      electricityDepositPaid
+    ),
+
+    electricity_deposit_balance: electricityDepositBalance,
+    electricity_deposit_balance_display: formatMoney(
+      electricityDepositBalance
+    ),
+
+    // Overall financial position
+    total_paid_amount: totalPaidAmount,
+    total_paid_display: formatMoney(totalPaidAmount),
+
+    total_balance_amount: totalBalanceAmount,
+    total_balance_display: formatMoney(totalBalanceAmount),
+
     status: row.status,
-    rent_status: balanceAmount > 0 ? 'partial' : balanceAmount < 0 ? 'advance_credit' : 'paid',
-    rent_status_label: balanceAmount > 0 ? 'Partial' : balanceAmount < 0 ? 'Advance credit' : 'Paid',
-    unit: `${row.property_short_name || row.property_name} · ${row.unit_number}`,
+
+    rent_status: rentStatus,
+    rent_status_label: rentStatusLabel,
+
+    unit:
+      `${row.property_short_name || row.property_name} · ${row.unit_number}`,
+
     notes: row.notes,
+
     payment_identity: {
       rent_payment_phone: row.rent_payment_phone,
       rent_bank_reference: row.rent_bank_reference,
       water_payment_phone: row.water_payment_phone,
       water_bank_reference: row.water_bank_reference,
     },
+
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
-
 function baseTenantSelect(whereClause = '') {
   return `
     SELECT
@@ -87,31 +244,84 @@ function baseTenantSelect(whereClause = '') {
       p.name AS property_name,
       SPLIT_PART(p.name, ' ', 1) AS property_short_name,
       u.unit_number,
-      
-      -- Rent balance payments
-      COALESCE(rent_payments.total, 0)::NUMERIC AS rent_paid_calculated,
-      COALESCE(rent_payments.total, 0)::NUMERIC AS paid_amount,
-      (t.monthly_rent - COALESCE(rent_payments.total, 0))::NUMERIC AS balance_amount,
-      
-      -- Rent deposit payments
-      COALESCE(rent_deposit_payments.total, 0)::NUMERIC AS rent_deposit_paid_calculated,
-      
-      -- Electricity deposit payments
-      COALESCE(electricity_deposit_payments.total, 0)::NUMERIC AS electricity_deposit_paid_calculated,
-      
-      -- Water deposit payments
-      COALESCE(water_deposit_payments.total, 0)::NUMERIC AS water_deposit_paid_calculated,
+
+      -- ========================================================
+      -- RENT PAYMENTS
+      -- ========================================================
+
+      COALESCE(
+        rent_payments.total,
+        0
+      )::NUMERIC AS rent_paid_calculated,
+
+      -- ========================================================
+      -- RENT DEPOSIT PAYMENTS
+      -- ========================================================
+
+      COALESCE(
+        rent_deposit_payments.total,
+        0
+      )::NUMERIC AS rent_deposit_paid_calculated,
+
+      -- ========================================================
+      -- ELECTRICITY DEPOSIT PAYMENTS
+      -- ========================================================
+
+      COALESCE(
+        electricity_deposit_payments.total,
+        0
+      )::NUMERIC AS electricity_deposit_paid_calculated,
+
+      -- ========================================================
+      -- WATER DEPOSIT PAYMENTS
+      -- ========================================================
+
+      COALESCE(
+        water_deposit_payments.total,
+        0
+      )::NUMERIC AS water_deposit_paid_calculated,
+
+      -- ========================================================
+      -- WATER BILLS
+      -- ========================================================
+
+      COALESCE(
+        water_bill_totals.total_amount,
+        0
+      )::NUMERIC AS water_bill_amount,
+
+      COALESCE(
+        water_bill_totals.amount_paid,
+        0
+      )::NUMERIC AS water_paid_calculated,
+
+      COALESCE(
+        water_bill_totals.balance,
+        0
+      )::NUMERIC AS water_balance_calculated,
+
+      -- ========================================================
+      -- PAYMENT IDENTITIES
+      -- ========================================================
 
       rent_phone.raw_value AS rent_payment_phone,
       rent_ref.raw_value AS rent_bank_reference,
+
       water_phone.raw_value AS water_payment_phone,
       water_ref.raw_value AS water_bank_reference
 
     FROM tenants t
-    INNER JOIN properties p ON p.id = t.property_id
-    INNER JOIN units u ON u.id = t.unit_id
 
-    -- Rent balance payments
+    INNER JOIN properties p
+      ON p.id = t.property_id
+
+    INNER JOIN units u
+      ON u.id = t.unit_id
+
+    -- ==========================================================
+    -- RENT PAYMENTS
+    -- ==========================================================
+
     LEFT JOIN (
       SELECT
         tenant_id,
@@ -120,9 +330,13 @@ function baseTenantSelect(whereClause = '') {
       WHERE status = 'matched'
         AND apply_to = 'rent_balance'
       GROUP BY tenant_id
-    ) rent_payments ON rent_payments.tenant_id = t.id
+    ) rent_payments
+      ON rent_payments.tenant_id = t.id
 
-    -- Rent deposit payments
+    -- ==========================================================
+    -- RENT DEPOSIT PAYMENTS
+    -- ==========================================================
+
     LEFT JOIN (
       SELECT
         tenant_id,
@@ -131,9 +345,13 @@ function baseTenantSelect(whereClause = '') {
       WHERE status = 'matched'
         AND apply_to = 'rent_deposit'
       GROUP BY tenant_id
-    ) rent_deposit_payments ON rent_deposit_payments.tenant_id = t.id
+    ) rent_deposit_payments
+      ON rent_deposit_payments.tenant_id = t.id
 
-    -- Electricity deposit payments
+    -- ==========================================================
+    -- ELECTRICITY DEPOSIT PAYMENTS
+    -- ==========================================================
+
     LEFT JOIN (
       SELECT
         tenant_id,
@@ -142,9 +360,13 @@ function baseTenantSelect(whereClause = '') {
       WHERE status = 'matched'
         AND apply_to = 'electricity_deposit'
       GROUP BY tenant_id
-    ) electricity_deposit_payments ON electricity_deposit_payments.tenant_id = t.id
+    ) electricity_deposit_payments
+      ON electricity_deposit_payments.tenant_id = t.id
 
-    -- Water deposit payments
+    -- ==========================================================
+    -- WATER DEPOSIT PAYMENTS
+    -- ==========================================================
+
     LEFT JOIN (
       SELECT
         tenant_id,
@@ -153,7 +375,34 @@ function baseTenantSelect(whereClause = '') {
       WHERE status = 'matched'
         AND apply_to = 'water_deposit'
       GROUP BY tenant_id
-    ) water_deposit_payments ON water_deposit_payments.tenant_id = t.id
+    ) water_deposit_payments
+      ON water_deposit_payments.tenant_id = t.id
+
+    -- ==========================================================
+    -- WATER BILL TOTALS
+    -- ==========================================================
+
+    LEFT JOIN (
+      SELECT
+        tenant_id,
+
+        SUM(total_amount) AS total_amount,
+
+        SUM(amount_paid) AS amount_paid,
+
+        SUM(balance) AS balance
+
+      FROM water_bills
+
+      WHERE status != 'cancelled'
+
+      GROUP BY tenant_id
+    ) water_bill_totals
+      ON water_bill_totals.tenant_id = t.id
+
+    -- ==========================================================
+    -- RENT PAYMENT PHONE
+    -- ==========================================================
 
     LEFT JOIN tenant_payment_identities rent_phone
       ON rent_phone.tenant_id = t.id
@@ -161,17 +410,29 @@ function baseTenantSelect(whereClause = '') {
       AND rent_phone.payment_channel = 'mpesa_phone'
       AND rent_phone.status = 'active'
 
+    -- ==========================================================
+    -- RENT BANK REFERENCE
+    -- ==========================================================
+
     LEFT JOIN tenant_payment_identities rent_ref
       ON rent_ref.tenant_id = t.id
       AND rent_ref.account_for = 'rent'
       AND rent_ref.payment_channel = 'bank_reference'
       AND rent_ref.status = 'active'
 
+    -- ==========================================================
+    -- WATER PAYMENT PHONE
+    -- ==========================================================
+
     LEFT JOIN tenant_payment_identities water_phone
       ON water_phone.tenant_id = t.id
       AND water_phone.account_for = 'water'
       AND water_phone.payment_channel = 'mpesa_phone'
       AND water_phone.status = 'active'
+
+    -- ==========================================================
+    -- WATER BANK REFERENCE
+    -- ==========================================================
 
     LEFT JOIN tenant_payment_identities water_ref
       ON water_ref.tenant_id = t.id
@@ -299,16 +560,22 @@ async function listTenants(user, filters = {}) {
   let tenants = result.rows.map(publicTenant);
 
   if (filters.balance === 'in_arrears') {
-    tenants = tenants.filter((tenant) => tenant.balance_amount > 0);
-  }
+  tenants = tenants.filter(
+    (tenant) => tenant.rent_balance_amount > 0
+  );
+}
 
-  if (filters.balance === 'credit') {
-    tenants = tenants.filter((tenant) => tenant.balance_amount < 0);
-  }
+if (filters.balance === 'credit') {
+  tenants = tenants.filter(
+    (tenant) => tenant.rent_balance_amount < 0
+  );
+}
 
-  if (filters.balance === 'paid') {
-    tenants = tenants.filter((tenant) => tenant.balance_amount === 0);
-  }
+if (filters.balance === 'paid') {
+  tenants = tenants.filter(
+    (tenant) => tenant.rent_balance_amount === 0
+  );
+}
 
   return {
     tenants,
@@ -319,10 +586,22 @@ async function listTenants(user, filters = {}) {
 function buildTenantSummary(tenants) {
   return {
     all: tenants.length,
-    in_arrears: tenants.filter((tenant) => tenant.balance_amount > 0).length,
-    credit_balance: tenants.filter((tenant) => tenant.balance_amount < 0).length,
-    moving_out: tenants.filter((tenant) => tenant.status === 'moving_out').length,
-    paid: tenants.filter((tenant) => tenant.balance_amount === 0).length,
+
+    in_arrears: tenants.filter(
+      (tenant) => tenant.rent_balance_amount > 0
+    ).length,
+
+    credit_balance: tenants.filter(
+      (tenant) => tenant.rent_balance_amount < 0
+    ).length,
+
+    moving_out: tenants.filter(
+      (tenant) => tenant.status === 'moving_out'
+    ).length,
+
+    paid: tenants.filter(
+      (tenant) => tenant.rent_balance_amount === 0
+    ).length,
   };
 }
 
