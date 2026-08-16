@@ -1,127 +1,81 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const dotenv = require('dotenv');
+const dotenv = require("dotenv");
 
 dotenv.config();
 
-const db = require('./src/config/db');
-const initAuthTables = require('./src/tables/auth_tables');
-const initPropertyTables = require('./src/tables/property_tables');
-const initUnitTables = require('./src/tables/unit_tables');
-const initTenantTables = require('./src/tables/tenant_tables');
-const initAgreementTables = require('./src/tables/agreement_tables');
-const initPaymentTables = require('./src/tables/payment_tables');
-const initWaterTables = require('./src/tables/water_tables');
-const initExpenseTables = require('./src/tables/expense_tables');
-const initMaintenanceTables = require('./src/tables/maintenance_tables');
-const initSmsTables = require('./src/tables/sms_tables');
-const initReportsTables = require('./src/tables/reports_tables');
-const initSettingsTables = require('./src/tables/settings_tables');
+const app = require("./app");
 
-const authRoutes = require('./src/routes/auth_routes');
-const propertyRoutes = require('./src/routes/property_routes');
-const unitRoutes = require('./src/routes/unit_routes');
-const tenantRoutes = require('./src/routes/tenant_routes');
-const agreementRoutes = require('./src/routes/agreement_routes');
-const paymentRoutes = require('./src/routes/payment_routes');
-const waterRoutes = require('./src/routes/water_routes');
-const expenseRoutes = require('./src/routes/expense_routes');
-const maintenanceRoutes = require('./src/routes/maintenance_routes');
-const caretakerRoutes = require('./src/routes/caretaker_routes');
-const smsRoutes = require('./src/routes/sms_routes');
-const reportRoutes = require('./src/routes/report_routes');
-const userRoutes = require('./src/routes/user_routes');
-const mpesaRoutes = require('./src/routes/mpesa_routes');
+const {
+    init_auth_tables,
+} = require("./src/auth/auth_tables");
 
-const app = express();
+
+const {
+    init_property_tables,
+} = require("./src/properties/property_tables");
+
+
+// const {
+//     init_payment_tables,
+// } = require("./src/payments/payment_tables");
+
 const PORT = process.env.PORT || 8080;
 
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+async function start_server() {
+    try {
+        /*
+        |--------------------------------------------------------------------------
+        | Initialise Database
+        |--------------------------------------------------------------------------
+        */
 
-app.get('/health', async (req, res) => {
-  try {
-    const result = await db.query('SELECT NOW()');
+        await init_auth_tables();
 
-    res.status(200).json({
-      success: true,
-      status: 'healthy',
-      timestamp: result.rows[0].now,
-      message: 'Rental Management backend is running',
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      status: 'unhealthy',
-      error: error.message,
-    });
-  }
-});
+        console.log(
+            "Authentication tables initialized successfully."
+        );
 
-app.use('/api/auth', authRoutes);
-app.use('/api/properties', propertyRoutes);
-app.use('/api/units', unitRoutes);
-app.use('/api/tenants', tenantRoutes);
-app.use('/api/agreements', agreementRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/payments', mpesaRoutes);
-app.use('/api/water', waterRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/maintenance', maintenanceRoutes);
-app.use('/api/caretakers', caretakerRoutes);
-app.use('/api/sms', smsRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/users', userRoutes);
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found',
-  });
-});
+        await init_property_tables();
 
-async function startServer() {
-  try {
-    await initAuthTables();
-    await initPropertyTables();
-    await initUnitTables();
-    await initTenantTables();
-    await initAgreementTables();
-    await initPaymentTables();
-    await initWaterTables();
-    await initExpenseTables();
-    await initMaintenanceTables();
-    await initSmsTables();
-    await initReportsTables();
-    await initSettingsTables();
+        console.log(
+            "Property tables initialized successfully."
+        );
 
-    await db.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-    `);
 
-    await db.query(`
-      ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS permission_level INTEGER NOT NULL DEFAULT 1;
-    `);
+        // await init_payment_tables();
 
-    console.log('All tables initialized successfully');
+        // console.log(
+        //     "Payment tables initialized successfully."
+        // );
 
-    app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log('M-Pesa C2B endpoints:');
-  console.log('POST /api/payments/accounts/:paymentAccountId/connect');
-  console.log('POST /api/payments/simulate');
-  console.log('POST /api/payments/c2b/validation');
-  console.log('POST /api/payments/c2b/confirmation');
-});
-  } catch (error) {
-    console.error('Failed to start server:', error.message);
-    process.exit(1);
-  }
+        /*
+        |--------------------------------------------------------------------------
+        | Start HTTP Server
+        |--------------------------------------------------------------------------
+        */
+
+        app.listen(PORT, () => {
+            console.log("");
+            console.log("========================================");
+            console.log("Rental Management Backend Started");
+            console.log("========================================");
+            console.log(`Server : http://localhost:${PORT}`);
+            console.log("Module : Authentication + Properties + Payments");
+            console.log("Status : Running");
+            console.log("========================================");
+            console.log("");
+        });
+    } catch (error) {
+        console.error("");
+        console.error("========================================");
+        console.error("Failed to start server");
+        console.error("========================================");
+        console.error(error);
+        console.error("========================================");
+        console.error("");
+
+        process.exit(1);
+    }
 }
 
-startServer();
+start_server();

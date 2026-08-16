@@ -1,172 +1,154 @@
 const africastalking = require('africastalking');
 
-// Initialize Africa's Talking client
-const client = africastalking({
-  apiKey: process.env.AFRICASTALKING_API_KEY,
-  username: process.env.AFRICASTALKING_USERNAME,
-});
+const SMS_COST_PER_MESSAGE = 1.50;
 
-const SMS_COST_PER_MESSAGE = 1.50; // KES per SMS
+const SMS_MODE = process.env.SMS_MODE || 'live';
 
-/**
- * Send SMS via Africa's Talking
- * @param {Object} options - SMS options
- * @param {string} options.phone - Recipient phone number
- * @param {string} options.message - SMS message
- * @param {string} options.senderId - Optional sender ID (overrides env)
- * @returns {Promise<Object>} - Result with status, messageId, cost
- */
-async function sendSms({ phone, message, senderId }) {
-  // If in console mode, just log
-  if (process.env.SMS_MODE === 'console') {
-    console.log(`[SMS] To: ${phone}, Message: ${message}`);
-    return {
-      status: 'sent',
-      messageId: `console-${Date.now()}`,
-      cost: SMS_COST_PER_MESSAGE,
-      success: true,
-    };
+const sms_client =
+  SMS_MODE === 'console'
+    ? null
+    : africastalking({
+        apiKey: process.env.AFRICASTALKING_API_KEY,
+        username: process.env.AFRICASTALKING_USERNAME,
+      }).SMS;
+
+function success_response(message_id, recipient = null) {
+  return {
+    success: true,
+    status: 'sent',
+    message_id,
+    cost: SMS_COST_PER_MESSAGE,
+    recipient,
+    error: null,
+  };
+}
+
+function failed_response(error) {
+  return {
+    success: false,
+    status: 'failed',
+    message_id: null,
+    cost: 0,
+    recipient: null,
+    error,
+  };
+}
+
+async function send_sms({ phone, message, sender_id }) {
+  if (SMS_MODE === 'console') {
+    console.log(`[SMS] ${phone}`);
+    console.log(message);
+
+    return success_response(`console-${Date.now()}`);
   }
 
   try {
-    const sms = client.SMS;
-    const options = {
+    const payload = {
       to: [phone],
-      message: message,
+      message,
     };
 
-    // Use custom sender ID or default
-    if (senderId || process.env.AFRICASTALKING_SENDER_ID) {
-      options.from = senderId || process.env.AFRICASTALKING_SENDER_ID;
+    if (sender_id || process.env.AFRICASTALKING_SENDER_ID) {
+      payload.from = sender_id || process.env.AFRICASTALKING_SENDER_ID;
     }
 
-    const response = await sms.send(options);
+    const response = await sms_client.send(payload);
 
-    // Check if the message was sent successfully
-    if (response && response.SMSMessageData) {
-      const data = response.SMSMessageData;
-      const recipient = data.Recipients && data.Recipients[0];
+    const sms_data = response?.SMSMessageData;
 
-      if (data.Message === 'Sent' || data.Message === 'Queued') {
-        return {
-          status: 'sent',
-          messageId: recipient?.messageId || `at-${Date.now()}`,
-          cost: SMS_COST_PER_MESSAGE,
-          success: true,
-          recipient: recipient,
-        };
-      } else {
-        return {
-          status: 'failed',
-          messageId: null,
-          cost: 0,
-          success: false,
-          error: data.Message || 'Unknown error',
-        };
-      }
-    } else {
-      return {
-        status: 'failed',
-        messageId: null,
-        cost: 0,
-        success: false,
-        error: 'Invalid response from provider',
-      };
+    if (!sms_data) {
+      return failed_response('Invalid response from provider');
     }
+
+    const recipient = sms_data.Recipients?.[0];
+
+    if (sms_data.Message === 'Sent' || sms_data.Message === 'Queued') {
+      return success_response(
+        recipient?.messageId || `at-${Date.now()}`,
+        recipient
+      );
+    }
+
+    return failed_response(sms_data.Message || 'Unknown error');
   } catch (error) {
     console.error('SMS sending failed:', error.message);
-    return {
-      status: 'failed',
-      messageId: null,
-      cost: 0,
-      success: false,
-      error: error.message,
-    };
+    return failed_response(error.message);
   }
 }
 
-/**
- * Send bulk SMS to multiple recipients
- * @param {Array} recipients - Array of {phone, message} objects
- * @param {string} senderId - Optional sender ID
- * @returns {Promise<Array>} - Results for each message
- */
-async function sendBulkSms(recipients, senderId) {
+async function send_bulk_sms(recipients, sender_id) {
   const results = [];
+  const chunk_size = 100;
 
-  // Africa's Talking supports up to 100 recipients per request
-  const chunkSize = 100;
+  for (let i = 0; i < recipients.length; i += chunk_size) {
+    const chunk = recipients.slice(i, i + chunk_size);
 
-  for (let i = 0; i < recipients.length; i += chunkSize) {
-    const chunk = recipients.slice(i, i + chunkSize);
-
-    // For console mode
-    if (process.env.SMS_MODE === 'console') {
+    if (SMS_MODE === 'console') {
       for (const recipient of chunk) {
-        console.log(`[SMS] To: ${recipient.phone}, Message: ${recipient.message}`);
+        console.log(`[SMS] ${recipient.phone}`);
+        console.log(recipient.message);
+
         results.push({
           phone: recipient.phone,
-          status: 'sent',
-          messageId: `console-${Date.now()}`,
-          cost: SMS_COST_PER_MESSAGE,
-          success: true,
+          ...success_response(`console-${Date.now()}`),
         });
       }
+
       continue;
     }
 
     try {
-      // Africa's Talking bulk send
-      const sms = client.SMS;
-      const options = {
-        to: chunk.map(r => r.phone),
-        message: chunk[0].message, // Same message for all in bulk
+      const payload = {
+        to: chunk.map((recipient) => recipient.phone),
+        message: chunk[0].message,
       };
 
-      if (senderId || process.env.AFRICASTALKING_SENDER_ID) {
-        options.from = senderId || process.env.AFRICASTALKING_SENDER_ID;
+      if (sender_id || process.env.AFRICASTALKING_SENDER_ID) {
+        payload.from = sender_id || process.env.AFRICASTALKING_SENDER_ID;
       }
 
-      const response = await sms.send(options);
+      const response = await sms_client.send(payload);
 
-      if (response && response.SMSMessageData) {
-        const data = response.SMSMessageData;
-        const recipientsList = data.Recipients || [];
+      const sms_data = response?.SMSMessageData;
 
-        for (let j = 0; j < chunk.length; j++) {
-          const recipient = recipientsList[j] || {};
-          results.push({
-            phone: chunk[j].phone,
-            status: data.Message === 'Sent' || data.Message === 'Queued' ? 'sent' : 'failed',
-            messageId: recipient.messageId || `at-${Date.now()}-${j}`,
-            cost: SMS_COST_PER_MESSAGE,
-            success: data.Message === 'Sent' || data.Message === 'Queued',
-            error: data.Message !== 'Sent' && data.Message !== 'Queued' ? data.Message : null,
-          });
-        }
-      } else {
-        // Fallback: mark all as failed
+      if (!sms_data) {
         for (const recipient of chunk) {
           results.push({
             phone: recipient.phone,
-            status: 'failed',
-            messageId: null,
-            cost: 0,
-            success: false,
-            error: 'Invalid response from provider',
+            ...failed_response('Invalid response from provider'),
+          });
+        }
+
+        continue;
+      }
+
+      const provider_recipients = sms_data.Recipients || [];
+
+      for (let j = 0; j < chunk.length; j++) {
+        const provider_recipient = provider_recipients[j];
+
+        if (sms_data.Message === 'Sent' || sms_data.Message === 'Queued') {
+          results.push({
+            phone: chunk[j].phone,
+            ...success_response(
+              provider_recipient?.messageId || `at-${Date.now()}-${j}`,
+              provider_recipient
+            ),
+          });
+        } else {
+          results.push({
+            phone: chunk[j].phone,
+            ...failed_response(sms_data.Message || 'Unknown error'),
           });
         }
       }
     } catch (error) {
       console.error('Bulk SMS sending failed:', error.message);
+
       for (const recipient of chunk) {
         results.push({
           phone: recipient.phone,
-          status: 'failed',
-          messageId: null,
-          cost: 0,
-          success: false,
-          error: error.message,
+          ...failed_response(error.message),
         });
       }
     }
@@ -175,12 +157,8 @@ async function sendBulkSms(recipients, senderId) {
   return results;
 }
 
-/**
- * Check SMS balance
- * @returns {Promise<Object>} - Balance information
- */
-async function checkBalance() {
-  if (process.env.SMS_MODE === 'console') {
+async function check_balance() {
+  if (SMS_MODE === 'console') {
     return {
       balance: 'KES 1000.00',
       currency: 'KES',
@@ -191,14 +169,14 @@ async function checkBalance() {
     const response = await fetch('https://api.africastalking.com/version1/user', {
       method: 'GET',
       headers: {
-        'apiKey': process.env.AFRICASTALKING_API_KEY,
-        'Accept': 'application/json',
+        apiKey: process.env.AFRICASTALKING_API_KEY,
+        Accept: 'application/json',
       },
     });
 
     const data = await response.json();
 
-    if (data && data.UserData) {
+    if (data?.UserData) {
       return {
         balance: data.UserData.balance,
         currency: data.UserData.currencyCode || 'KES',
@@ -211,6 +189,7 @@ async function checkBalance() {
     };
   } catch (error) {
     console.error('Balance check failed:', error.message);
+
     return {
       balance: 'Unknown',
       currency: 'KES',
@@ -220,8 +199,8 @@ async function checkBalance() {
 }
 
 module.exports = {
-  sendSms,
-  sendBulkSms,
-  checkBalance,
+  send_sms,
+  send_bulk_sms,
+  check_balance,
   SMS_COST_PER_MESSAGE,
 };

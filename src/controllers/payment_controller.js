@@ -4,7 +4,7 @@ const {
   autoPaymentSchema,
   matchPaymentSchema,
   searchTenantsSchema,
-} = require('../validators/payment_validator');
+} = require('../payments/payment_validator');
 
 function getValidationError(error) {
   return error.issues ? error.issues[0].message : error.message;

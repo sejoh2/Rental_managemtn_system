@@ -1,23 +1,23 @@
-function requireRole(...allowedRoles) {
-  return function roleMiddleware(req, res, next) {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required',
-      });
-    }
+function require_role(...allowed_roles) {
+    return function role_middleware(req, res, next) {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                error: "Authentication required",
+            });
+        }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        error: 'You do not have permission to perform this action',
-      });
-    }
+        if (!allowed_roles.includes(req.user.role)) {
+            return res.status(403).json({
+                success: false,
+                error: "You do not have permission to perform this action",
+            });
+        }
 
-    next();
-  };
+        next();
+    };
 }
 
 module.exports = {
-  requireRole,
+    require_role,
 };
